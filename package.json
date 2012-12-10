@@ -1,0 +1,21 @@
+{
+  "name": "ogov-api",
+  "version": "0.1.0",
+  "description": "Argentina's Open Goverment API",
+  "main": "app/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "mongoose": "*",
+    "jsdom": "*",
+    "express": "*",
+    "winston": "*",
+    "async": "*",
+    "cron": "*"
+  },
+  "repository": "",
+  "author": "Matias Mirabelli <matias.mirabelli@fieldof.me>",
+  "license": "BSD"
+}
+
