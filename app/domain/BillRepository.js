@@ -1,8 +1,15 @@
 
 /** Repository to manage bills.
  * @constructor
+ * @name ogov.domain.BillRepository
  */
 module.exports = function BillRepository() {
+
+  /** Time from which bills are registered.
+   * @constant
+   * @private
+   */
+  var BILL_START_DATE = new Date("01/01/1991");
 
   /** Application data source.
    * @type ogov.core.DataSource
@@ -12,18 +19,25 @@ module.exports = function BillRepository() {
   var DataSource = Import("ogov.core.DataSource");
 
   /** Bill domain entity.
-   * @type ogov.domain.Bill
+   * @type Function
    * @private
    * @fieldOf ogov.domain.BillRepository#
    */
   var Bill = Import("ogov.domain.Bill");
 
   /** Person domain entity.
-   * @type ogov.domain.Person
+   * @type Function
    * @private
    * @fieldOf ogov.domain.BillRepository#
    */
   var Person = Import("ogov.domain.Person");
+
+  /** Query builder class to create mongo queries.
+   * @type Function
+   * @private
+   * @fieldOf ogov.domain.BillRepository#
+   */
+  var QueryBuilder = Import("ogov.domain.QueryBuilder");
 
   /** Normalizes the specified search criteria.
    *
@@ -38,25 +52,27 @@ module.exports = function BillRepository() {
    *   on time or not. If it's true, bills are listed since fromDate backward
    *   on time until toDate. If it's false bills are listed since fromDate
    *   forward on time until toDate. Default is true.
-   * @return {Query} Returns a node Stream to read results from. Never
-   *   returns null.
+   * @return {QueryBuilder} Returns the query builder to keep adding operations.
    */
-  var createCriteria = function (criteria) {
-    var from = new Date(criteria.fromDate || new Date().getTime());
-    var to = new Date(criteria.toDate || new Date().getTime());
-    var query = (function () {
-      var result = {
-        creationTime: { $lte: criteria.backward ? from : to }
-      };
+  var createQueryBuilder = function (criteria) {
+    var from = criteria.backward ? new Date() : undefined;
+    var to = criteria.backward ? undefined : BILL_START_DATE;
+    var queryBuilder = new QueryBuilder();
 
-      if (criteria.toDate !== undefined) {
-        result.creationTime.$gte = criteria.backward ? to : from;
-      }
-
-      return result;
-    }());
-
-    return query;
+    if (criteria.fromDate) {
+      from = criteria.backward ? new Date(criteria.fromDate) :
+        new Date(criteria.toDate || BILL_START_DATE);
+    }
+    if (criteria.toDate) {
+      to = criteria.backward ? new Date(criteria.toDate) :
+        new Date(criteria.fromDate || new Date().getTime());
+    }
+    if (from && to) {
+      queryBuilder
+        .lte({ creationTime: criteria.backward ? from : to })
+        .gte({ creationTime: criteria.backward ? to : from });
+    }
+    return queryBuilder
   };
 
   return {
@@ -78,7 +94,7 @@ module.exports = function BillRepository() {
      *   query results. Can be null.
      */
     list: function (criteria) {
-      callback(Bill.find(createCriteria(criteria)).stream());
+      callback(Bill.find(createQueryBuilder(criteria).build()).stream());
     },
 
     /** Search for bills which subscribers belong to one of the specified
@@ -101,18 +117,46 @@ module.exports = function BillRepository() {
      */
     findByParties: function (parties, criteria, callback) {
       Person.find({ party: { $in: parties }}, function (err, people) {
-        var query = createCriteria(criteria);
-        query.subscribers = {
-          $in: people.map(function (person) {
+        var queryBuilder = createQueryBuilder(criteria);
+        queryBuilder.contains({
+          subscribers: people.map(function (person) {
             return {
               _id: person._id
             };
           })
-        };
+        });
         if (callback) {
-          callback(Bill.find(query).stream());
+          callback(Bill.find(queryBuilder.build()).stream());
         }
       });
+    },
+
+    /** Search for bills signed off by the specified person.
+     *
+     * @param {String} personId Id of the person that signed off required bills.
+     *   cannot be null or empty.
+     * @param {Object} [criteria] Search criteria. Can be null.
+     * @param {String | Number} [criteria.fromDate] Either timestamp or date
+     *   String to filter bills from. Default is the current date, so bills are
+     *   listed backward.
+     * @param {String | Number} [criteria.toDate] Either timestamp or date
+     *   String to filter bills to. Default is null, so there's no limit
+     *   listing bills backward.
+     * @param {Boolean} [criteria.backward] Indicates whether to list backward
+     *   on time or not. If it's true, bills are listed since fromDate backward
+     *   on time until toDate. If it's false bills are listed since fromDate
+     *   forward on time until toDate. Default is true.
+     * @param {Function} [callback] Callback that receives the stram to read
+     *   query results. Can be null.
+     */
+    findByPerson: function (personId, criteria, callback) {
+      var queryBuilder = createQueryBuilder(criteria);
+      queryBuilder.contains({
+        subscribers: [{
+          _id: personId
+        }]
+      });
+      callback(Bill.find(queryBuilder.build()).stream());
     }
   };
 };

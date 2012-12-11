@@ -26,5 +26,5 @@ DataSource.connect(function () {
 
   var job = new BillImporterJob('1 7 * * *');
   // Uncomment to import bills.
-  job.run();
+  // job.run();
 });
