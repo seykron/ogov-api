@@ -33,6 +33,13 @@ module.exports = function PersonRepository() {
    */
   var QueryBuilder = Import("ogov.domain.QueryBuilder");
 
+  /** Wrapper used to return query streams.
+   * @type {ogov.core.QueryStreamWrapper}
+   * @private
+   * @fieldOf ogov.domain.BillRepository#
+   */
+  var QueryStreamWrapper = Import("ogov.core.QueryStreamWrapper");
+
   /** Adds common query operators.
    *
    * @param {Object} [criteria] Search criteria. Can be null.
@@ -45,21 +52,35 @@ module.exports = function PersonRepository() {
     var queryBuilder = new QueryBuilder();
 
     if (criteria.party) {
-      queryBuilder.eq({ party: criteria.party });
+      queryBuilder.eq({ party: criteria.party.toUpperCase() });
     }
     if (criteria.province) {
-      queryBuilder.eq({ province: criteria.province });
+      queryBuilder.eq({ province: criteria.province.toUpperCase() });
     }
     if (criteria.name) {
-      queryBuilder.regex({ name: new RegExp(criteria.name) });
+      // Check performance, mongo doesn't use indexes when querying with
+      // regexps.
+      queryBuilder.regex({ name: new RegExp(criteria.name.toUpperCase()) });
     }
 
     return queryBuilder;
   };
 
+  /** Wraps the specified QueryStream.
+   * @param {mongoose.QueryStream} queryStream QueryStream to wrap. Cannot be
+   *   null.
+   * @return {ogov.core.QueryStreamWrapper} Returns the wrapped stream. Never
+   *   returns null.
+   * @private
+   * @methodOf ogov.domain.BillRepository#
+   */
+  var wrapQueryStream = function (queryStream) {
+    return new QueryStreamWrapper(queryStream);
+  };
+
   return {
 
-    /** Search for people that belong to the specified parties.
+    /** List people according to specified information.
      *
      * @param {Object} [criteria] Search criteria. Can be null.
      * @param {String} [criteria.party] Required person party.
@@ -70,7 +91,7 @@ module.exports = function PersonRepository() {
      */
     list: function (criteria, callback) {
       var query = createQueryBuilder(criteria).build();
-      callback(Person.find(query).stream());
+      callback(wrapQueryStream(Person.find(query).stream()));
     },
 
     /** Search for people that belong to the specified parties.
@@ -84,11 +105,14 @@ module.exports = function PersonRepository() {
      *   query results. Can be null.
      */
     findByParties: function (parties, criteria, callback) {
+      var textParties = parties.map(function (party) {
+        return party.toUpperCase();
+      });
       var query = createQueryBuilder(criteria).contains({
-        party: parties
+        party: textParties
       }).build();
 
-      callback(Person.find(query).stream());
+      callback(wrapQueryStream(Person.find(query).stream()));
     },
 
     /** Returns the number of presented bills by person.

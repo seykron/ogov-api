@@ -39,6 +39,13 @@ module.exports = function BillRepository() {
    */
   var QueryBuilder = Import("ogov.domain.QueryBuilder");
 
+  /** Wrapper used to return query streams.
+   * @type {ogov.core.QueryStreamWrapper}
+   * @private
+   * @fieldOf ogov.domain.BillRepository#
+   */
+  var QueryStreamWrapper = Import("ogov.core.QueryStreamWrapper");
+
   /** Normalizes the specified search criteria.
    *
    * @param {Object} [criteria] Search criteria. Can be null.
@@ -53,6 +60,7 @@ module.exports = function BillRepository() {
    *   on time until toDate. If it's false bills are listed since fromDate
    *   forward on time until toDate. Default is true.
    * @return {QueryBuilder} Returns the query builder to keep adding operations.
+   * @methodOf ogov.domain.BillRepository#
    */
   var createQueryBuilder = function (criteria) {
     var from = criteria.backward ? new Date() : undefined;
@@ -75,6 +83,18 @@ module.exports = function BillRepository() {
     return queryBuilder
   };
 
+  /** Wraps the specified QueryStream.
+   * @param {mongoose.QueryStream} queryStream QueryStream to wrap. Cannot be
+   *   null.
+   * @return {ogov.core.QueryStreamWrapper} Returns the wrapped stream. Never
+   *   returns null.
+   * @private
+   * @methodOf ogov.domain.BillRepository#
+   */
+  var wrapQueryStream = function (queryStream) {
+    return new QueryStreamWrapper(queryStream);
+  };
+
   return {
 
     /** Lists bills filtering by a range of dates.
@@ -94,7 +114,8 @@ module.exports = function BillRepository() {
      *   query results. Can be null.
      */
     list: function (criteria) {
-      callback(Bill.find(createQueryBuilder(criteria).build()).stream());
+      callback(Bill
+        .find(wrapQueryStream(createQueryBuilder(criteria).build()).stream()));
     },
 
     /** Search for bills which subscribers belong to one of the specified
@@ -116,7 +137,11 @@ module.exports = function BillRepository() {
      *   query results. Can be null.
      */
     findByParties: function (parties, criteria, callback) {
-      Person.find({ party: { $in: parties }}, function (err, people) {
+      var textParties = parties.map(function (party) {
+        return party.toUpperCase();
+      });
+
+      Person.find({ party: { $in: textParties }}, function (err, people) {
         var queryBuilder = createQueryBuilder(criteria);
         queryBuilder.contains({
           subscribers: people.map(function (person) {
@@ -126,7 +151,7 @@ module.exports = function BillRepository() {
           })
         });
         if (callback) {
-          callback(Bill.find(queryBuilder.build()).stream());
+          callback(wrapQueryStream(Bill.find(queryBuilder.build()).stream()));
         }
       });
     },
@@ -156,7 +181,7 @@ module.exports = function BillRepository() {
           _id: personId
         }]
       });
-      callback(Bill.find(queryBuilder.build()).stream());
+      callback(wrapQueryStream(Bill.find(queryBuilder.build()).stream()));
     }
   };
 };
