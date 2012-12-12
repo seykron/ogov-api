@@ -44,7 +44,6 @@ module.exports = function BillImporterJob(cronPattern) {
    * @fieldOf OG.import.BillImporterJob#
    */
   var execute = function () {
-    console.log("FOO");
     importer.start(function (pageNumber, bills, failedBills, callback) {
       pageResult.push({
         number: pageNumber,
