@@ -12,6 +12,12 @@ The application runs on port 3000:
 http://localhost:3000/
 ```
 
+## Import data
+Importer job must run as cron job. Until then it's possible to start the importer as standalone process:
+```
+node app/importer.js
+```
+
 ## Endpoints
 
 ### Bills
