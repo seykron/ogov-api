@@ -80,7 +80,7 @@ module.exports = function BillRepository() {
         .lte({ creationTime: criteria.backward ? from : to })
         .gte({ creationTime: criteria.backward ? to : from });
     }
-    return queryBuilder
+    return queryBuilder;
   };
 
   /** Wraps the specified QueryStream.
@@ -113,9 +113,9 @@ module.exports = function BillRepository() {
      * @param {Function} [callback] Callback that receives the stram to read
      *   query results. Can be null.
      */
-    list: function (criteria) {
-      callback(Bill
-        .find(wrapQueryStream(createQueryBuilder(criteria).build()).stream()));
+    list: function (criteria, callback) {
+      callback(wrapQueryStream(Bill
+        .find(createQueryBuilder(criteria).build()).stream()));
     },
 
     /** Search for bills which subscribers belong to one of the specified
