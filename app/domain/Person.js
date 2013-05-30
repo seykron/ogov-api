@@ -1,19 +1,22 @@
-
+/** Represents a person that participates in a bill.
+ * @param {Object} [rawPerson] Initial person information. Can be null.
+ */
 module.exports = function Person (rawPerson) {
 
-  /** Application data source.
-   * @type ogov.core.DataSource
-   * @private
-   * @fieldOf ogov.domain.Person#
-   */
-  var DataSource = Import("ogov.core.DataSource");
+  return Extend(this, {
+    /** Person full name.
+     * @type String
+     */
+    name: String,
 
-  /** Bill model definition.
-   * @type Function
-   * @private
-   * @fieldOf OG.model.Bill
-   */
-  var Model = DataSource.Model("OG.domain.Person");
+    /** Party this person belongs to.
+     * @type String
+     */
+    party: String,
 
-  return new Model(rawPerson);
+    /** Province this person represents.
+     * @type String
+     */
+    province: String
+  }, rawPerson || {});
 };

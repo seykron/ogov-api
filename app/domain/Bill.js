@@ -1,26 +1,52 @@
+/** Mongoose library to access MongoDB.
+ *
+ * @private
+ * @fieldOf OG.core.SchemaRegistry#
+ */
+var mongoose = require("mongoose");
+
 /** Represents a bill.
  *
+ * @param {Object} [rawBill] Initial bill information. Can be null.
  * @constructor
+ * @name ogov.model.Bill
+ * @augments mongoose.Model
  */
 module.exports = function Bill (rawBill) {
 
-  var DataSource = Import("ogov.core.DataSource");
+  return Extend(this, {
+    /** Bill type. */
+    type: String,
 
-  /** Bill model definition.
-   * @type Function
-   * @private
-   * @fieldOf OG.model.Bill
-   */
-  var Model = DataSource.Model("OG.domain.Bill");
+    /** Chamber that issued the bill.
+     */
+    source: String,
 
-  /** Base object to inherit behaviour from.
-   * @private
-   */
-  var base = new Model(rawBill);
+    /** Unique name of the file which contains this bill.
+     */
+    file: String,
 
-  return Extend(base, {
-    findByParty: function (partyName) {
+    /** Description of publication file.
+     */
+    publishedOn: String,
 
-    }
-  });
+    /** Time when the bill has been issued.
+     */
+    creationTime: Date,
+
+    /** Bill summary information.
+     */
+    summary: String,
+
+    /** List of subscribers. */
+    subscribers: [{ _id: mongoose.Schema.ObjectId }]
+  }, rawBill || {});
+};
+
+/** Entity schema additional information.
+ */
+module.exports.SCHEMA_INFO = {
+  indexes: {
+    file: 1
+  }
 };

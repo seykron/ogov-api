@@ -1,7 +1,7 @@
 /** Mongoose library to access MongoDB.
  *
  * @private
- * @fieldOf OG.DataSource#
+ * @fieldOf OG.core.SchemaRegistry#
  */
 var mongoose = require("mongoose");
 
@@ -12,57 +12,53 @@ var mongoose = require("mongoose");
  */
 var DataSource = Import("ogov.core.DataSource");
 
-/** Mapping of existing schemas descriptions.
+/** Existing model definitions.
  * @type Object[String => Object]
  * @private
+ * @fieldOf ogov.core.SchemaRegistry#
  */
-var Schemas = {};
-
-Schemas["OG.domain.Person"] = function () {
-  return {
-    indexes: {
-      name: 1
-    },
-    schema: {
-      name: String,
-      party: String,
-      province: String
-    }
-  };
-};
-
-Schemas["OG.domain.Bill"] = function () {
-  return {
-    indexes: {
-      file: 1
-    },
-    schema: {
-      type: String,
-      source: String,
-      file: String,
-      publishedOn: String,
-      creationTime: Date,
-      summary: String,
-      subscribers: [{ _id: mongoose.Schema.ObjectId }]
-    }
-  };
-};
+var modelDefinitions = {};
 
 module.exports = {
-  /** Registers all model entities.
-   */
-  register: function () {
-    var modelName;
-    var schemaInfo;
-    var schema;
 
-    for (modelName in Schemas) {
-      if (Schemas.hasOwnProperty(modelName)) {
-        schemaInfo = Schemas[modelName]();
-        DataSource.Model(modelName, schemaInfo.schema);
-        schema = DataSource.Schema(modelName);
-        schema.index(schemaInfo.indexes);
+  /** Adds an entity into the registry.
+   * @param {String} entityName Entity name, must be unique in the context.
+   *    Cannot be null or empty.
+   * @param {Function} entityClass Class that represents the entity. Must
+   *    have a default constructor. Cannot be null.
+   * @param {Object} [schemaInfo] Additional schema information, such as
+   *    <code>indexes</code>. Can be null.
+   */
+  register: function (entityName, entityClass, schemaInfo) {
+    var Entity = entityClass;
+    var schema = new mongoose.Schema(new Entity());
+    var Model = DataSource.createModel(entityName, schema);
+
+    modelDefinitions[entityName] = {
+      schema: schema,
+      model: Model
+    };
+
+    if (schemaInfo && schemaInfo.indexes) {
+      schema.index(schemaInfo.indexes);
+    }
+
+    Entity.prototype = new Model();
+    Extend(Entity, Model);
+  },
+
+  /** Returns the list of existing modules in the registry.
+   * @return {mongoose.Model[]} Returns a list of models. Never returns null.
+   */
+  listModels: function () {
+    var models = [];
+
+    for (modelName in modelDefinitions) {
+      if (modelDefinitions.hasOwnProperty(modelName)) {
+        models.push(modelDefinitions[modelName].model);
       }
     }
+
+    return models;
   }
 };

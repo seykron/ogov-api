@@ -1,25 +1,43 @@
-var express = require("express");
-var app = express();
+/** Global import. */
+Import = require("./util/Import");
+Import.baseDir(__dirname);
 
-// General configuration.
-app.configure(function(){
-  app.use(express.methodOverride());
-  app.use(express.bodyParser());
-  app.use(express.cookieParser());
-  app.use(app.router);
-});
-
-Import = require("./util/Import")
+/** Global extend. */
 Extend = Import("ogov.util.Extend");
 
+var SchemaRegistry = Import("ogov.core.SchemaRegistry");
 var DataSource = Import("ogov.core.DataSource");
 
-DataSource.connect(function () {
-  var SchemaRegistry = Import("ogov.core.SchemaRegistry");
+/** Mapping of persistent classes used by ogov-api.
+ * @type {Object}
+ */
+var PERSISTENT_CLASSES = {
+  "OG.domain.Bill": function () {
+    return Import("ogov.domain.Bill");
+  },
+  "OG.domain.Person": function () {
+    return Import("ogov.domain.Person");
+  }
+};
 
-  SchemaRegistry.register();
+module.exports = {
 
-  require("./routes")(app);
+  /** Starts ogov API.
+   * @param {Function} callback Function invoked when initialization is
+   *    completed. It takes a callback as parameter in order to register
+   *    endpoints into an express application. Cannot be null.
+   */
+  start: function (callback) {
+    DataSource.connect(function () {
+      var modelName;
+      var persistentClass;
 
-  app.listen(3000);
-});
+      for (modelName in PERSISTENT_CLASSES) {
+        persistentClass = PERSISTENT_CLASSES[modelName]();
+        SchemaRegistry.register(modelName, persistentClass,
+          persistentClass.SCHEMA_INFO);
+      }
+      callback(Import("ogov.application.Endpoints"));
+    });
+  }
+};
