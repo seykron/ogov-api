@@ -47,9 +47,19 @@ module.exports = function BillImporter(options) {
    * @fieldOf OG.importer.BillImporter#
    */
   var DATA_SOURCE = "http://www1.hcdn.gov.ar/proyectos_search/resultado.asp?" +
-    "giro_giradoA=&odanno=&pageorig=1&fromForm=1&ordenar=3&tipo_de_proy=ley" +
-    "&chkFirmantes=on&fecha_inicio=01/01/1999&fecha_fin=${endDate}&" +
-    "whichpage=${pageNumber}&pagesize=${pageSize}";
+    "ordenar=3" +
+    "&chkDictamenes=on" +         // Get dictums.
+    "&chkFirmantes=on" +          // Get subscribers.
+    "&chkTramite=on" +            // Get parliamentary procedures.
+    "&chkComisiones=on" +         // Get committees.
+    "&fecha_inicio=01/01/1999" +  // Bills start date.
+    "&fecha_fin=${endDate}" +     // Bills end date.
+    "&whichpage=${pageNumber}" +  // Page number to fetch.
+    "&pagesize=${pageSize}" +     // Number of bills per page.
+    "&giro_giradoA=" +             // Required to make it work.
+    "&odanno=" +                  // Required to make it work.
+    "&pageorig=1" +               // Required to make it work.
+    "&fromForm=1";                // Required to make it work.
 
   /** Async flow contro library.
    * @type Object
@@ -76,6 +86,18 @@ module.exports = function BillImporter(options) {
    * @fieldOf OG.importer.BillImporter#
    */
   var Bill = Import("ogov.domain.Bill");
+
+  /** Procedure domain entity.
+   * @private
+   * @fieldOf OG.importer.BillImporter#
+   */
+  var Procedure = Import("ogov.domain.Procedure");
+
+  /** Dictum domain entity.
+   * @private
+   * @fieldOf OG.importer.BillImporter#
+   */
+  var Dictum = Import("ogov.domain.Dictum");
 
   /** Last queued page.
    * @type Number
@@ -166,6 +188,7 @@ module.exports = function BillImporter(options) {
       var bills = [];
       var failedBills = [];
       var jQuery = window.jQuery;
+      var documents = jQuery(".toc");
 
       if (errors) {
         LOG.info("Error fetching page " + pageNumber + ": " + err);
@@ -173,20 +196,42 @@ module.exports = function BillImporter(options) {
         return callback(new Error(errors));
       }
 
-      async.forEachLimit(jQuery(".toc"), 10, function (document, next) {
+      if (documents.length === 0) {
+        LOG.info("Error fetching page " + pageNumber);
+
+        return callback(new Error("Empty response, maybe querying error?"));
+      }
+
+      async.forEachLimit(documents, 10, function (document, next) {
+        var rawBill = {};
+
         async.waterfall([
-          async.apply(extractSubscribers, jQuery, jQuery(document)),
-          async.apply(extractBill, jQuery, jQuery(document))
-        ], function (err, bill) {
+          async.apply(extractBill, jQuery, jQuery(document), rawBill),
+          async.apply(extractSubscribers, jQuery, jQuery(document), rawBill),
+          async.apply(extractCommittees, jQuery, jQuery(document), rawBill),
+          async.apply(extractDictums, jQuery, jQuery(document), rawBill),
+          async.apply(extractProcedures, jQuery, jQuery(document), rawBill)
+        ], function (err) {
           if (err) {
             failedBills.push({
-              bill: bill,
+              bill: rawBill,
               error: err
             });
           } else {
-            bills.push(bill);
+            Bill.update({ file: rawBill.file }, rawBill, {
+              upsert: true
+            }, function (err, numberAffected, bill) {
+              if (err) {
+                failedBills.push({
+                  bill: rawBill,
+                  error: err
+                });
+              } else {
+                bills.push(bill);
+              }
+              next();
+            });
           }
-          next();
         });
       }, function (err) {
         if (err) {
@@ -201,15 +246,18 @@ module.exports = function BillImporter(options) {
     });
   };
 
-  /** Extracts the list of subscribers into the bill.
+  /** Extracts the list of subscribers within the bill.
    *
+   * @param {Object} jQuery jQuery framework. Cannot be null.
    * @param {Element} document Source document element. Cannot be null.
-   * @param {Object} bill The bill being created. Cannot be null.
+   * @param {Object} rawBill Bill being populated. Cannot be null.
+   * @param {Function} callback Callback invoked when subscribers scrapping
+   *    finished. It receives an error as parameter. Cannot be null.
    * @private
    * @methodOf OG.importer.BillImporter#
    */
-  var extractSubscribers = function (jQuery, document, callback) {
-    var subscribersEl = document.find(".item1 > div > div.item1 > table > tr");
+  var extractSubscribers = function (jQuery, document, rawBill, callback) {
+    var subscribersEl = document.find("div.item1:eq(0) > table > tr");
     var subscribers = [];
 
     async.forEachLimit(subscribersEl, 10, function (subscriberEl, next) {
@@ -218,10 +266,9 @@ module.exports = function BillImporter(options) {
       var name = errorIfEmpty(subscriberData.get(0));
 
       // Not a subscriber, just the section title.
-      if (subscriberData.length === 1) {
+      if (subscriberData.find("span").length === 1) {
         return next();
       }
-
       rawSubscriber = {
         party: defaultIfEmpty(subscriberData.get(1), "NONE"),
         province: errorIfEmpty(subscriberData.get(2))
@@ -238,7 +285,146 @@ module.exports = function BillImporter(options) {
         LOG.info("Error extracting subscribers: " + err);
       }
 
-      callback(err, subscribers);
+      rawBill.subscribers = subscribers;
+
+      callback(err);
+    });
+  };
+
+  /** Extracts the list of committees that reviewed the bill.
+   *
+   * @param {Object} jQuery jQuery framework. Cannot be null.
+   * @param {Element} document Source document element. Cannot be null.
+   * @param {Function} callback Callback invoked when subscribers scrapping
+   *    finished. It receives an error as parameter. Cannot be null.
+   * @private
+   * @methodOf OG.importer.BillImporter#
+   */
+  var extractCommittees = function (jQuery, document, rawBill, callback) {
+    var committeesEl = document.find("div.item1:eq(1) > table > tr");
+    var committeeData;
+    var i;
+
+    try {
+      rawBill.committees = [];
+
+      for (i = 0; i < committeesEl.length; i++) {
+        committeeData = jQuery(committeesEl.get(i)).find("td");
+
+        // Ignores the section title.
+        if (committeeData.find("span").length === 0) {
+          rawBill.committees.push(errorIfEmpty(committeeData.get(0)));
+        }
+      }
+      callback(null);
+    } catch (err) {
+      callback(err);
+    }
+  };
+
+  /** Extracts the list of dictums over the bill.
+   *
+   * @param {Object} jQuery jQuery framework. Cannot be null.
+   * @param {Element} document Source document element. Cannot be null.
+   * @param {Object} rawBill Bill being populated. Cannot be null.
+   * @param {Function} callback Callback invoked when subscribers scrapping
+   *    finished. It receives an error as parameter. Cannot be null.
+   * @private
+   * @methodOf OG.importer.BillImporter#
+   */
+  var extractDictums = function (jQuery, document, rawBill, callback) {
+    var dictumsEl = document.find("div.item1:eq(2) > table > tr");
+    var dictums = [];
+
+    async.forEachLimit(dictumsEl, 10, function (dictumEl, next) {
+      try {
+        var dictumData = jQuery(dictumEl).children();
+        var rawDictum;
+        var name = errorIfEmpty(dictumData.get(0));
+
+        // Not a dictum, just the section title.
+        if (dictumData.find("span").length === 1) {
+          return next();
+        }
+
+        rawDictum = {
+          file: rawBill.file,
+          source: errorIfEmpty(dictumData.get(0)),
+          orderPaper: errorIfEmpty(dictumData.get(1)),
+          date: convertDate(defaultIfEmpty(dictumData.get(2))),
+          result: defaultIfEmpty(dictumData.get(3))
+        };
+
+        Dictum.findOneAndUpdate({ file: rawBill.file }, rawDictum, {
+          upsert: true
+        }, function (err, dictum) {
+          dictums.push(dictum);
+          next(err);
+        });
+      } catch (err) {
+        next(err);
+      }
+    }, function (err) {
+      if (err) {
+        LOG.info("Error extracting dictums: " + err);
+      }
+
+      rawBill.dictums = dictums;
+
+      callback(err);
+    });
+  };
+
+  /** Extracts the list of procedures for the bill.
+   *
+   * @param {Object} jQuery jQuery framework. Cannot be null.
+   * @param {Element} document Source document element. Cannot be null.
+   * @param {Object} rawBill Bill being populated. Cannot be null.
+   * @param {Function} callback Callback invoked when subscribers scrapping
+   *    finished. It receives an error as parameter. Cannot be null.
+   * @private
+   * @methodOf OG.importer.BillImporter#
+   */
+  var extractProcedures = function (jQuery, document, rawBill, callback) {
+    var proceduresEl = document.find("div.item1:eq(3) > table > tr");
+    var procedures = [];
+
+    async.forEachLimit(proceduresEl, 10, function (procedureEl, next) {
+      try {
+        var procedureData = jQuery(procedureEl).children();
+        var rawProcedure;
+        var name = errorIfEmpty(procedureData.get(0));
+
+        // Not a procedure, just the section title.
+        if (procedureData.find("span").length === 1) {
+          return next();
+        }
+
+        rawProcedure = {
+          file: rawBill.file,
+          source: errorIfEmpty(procedureData.get(0)),
+          topic: defaultIfEmpty(procedureData.get(1)),
+          date: convertDate(defaultIfEmpty(procedureData.get(2))),
+          result: defaultIfEmpty(procedureData.get(3))
+        };
+
+        Procedure.findOneAndUpdate({ file: rawBill.file }, rawProcedure, {
+          upsert: true
+        }, function (err, procedure) {
+          procedures.push(procedure);
+          next(err);
+        });
+      } catch (err) {
+        next(err);
+      }
+    }, function (err) {
+      if (err) {
+        LOG.info("Error extracting procedures: " + err);
+      }
+
+      rawBill.procedures = procedures;
+
+      callback(err);
     });
   };
 
@@ -249,24 +435,39 @@ module.exports = function BillImporter(options) {
    * @private
    * @methodOf OG.importer.BillImporter#
    */
-  var extractBill = function (jQuery, document, subscribers, callback) {
-    var generalInformation = document.find(".item1 > div").contents();
+  var extractBill = function (jQuery, document, rawBill, callback) {
+    var generalInformation = document.find("span.item1 > div").contents();
     var file = errorIfEmpty(generalInformation.get(3));
-    var rawBill = {
-      type: document.find(".item1 > b").text(),
-      source: errorIfEmpty(generalInformation.get(1)),
-      file: file,
-      publishedOn: errorIfEmpty(generalInformation.get(6)),
-      creationTime: convertDate(errorIfEmpty(generalInformation.get(8))),
-      summary: defaultIfEmpty(generalInformation.get(11)),
-      subscribers: subscribers
-    };
 
-    Bill.update({ file: file }, rawBill, {
-      upsert: true
-    }, function (err, numberAffected, bill) {
-      callback(err, bill || rawBill);
-    });
+    try {
+      Extend(rawBill, {
+        type: document.find(".item1 > b").text(),
+        source: errorIfEmpty(generalInformation.get(1)),
+        file: file,
+        publishedOn: errorIfEmpty(generalInformation.get(6)),
+        creationTime: convertDate(errorIfEmpty(generalInformation.get(8)))
+      });
+
+      if (generalInformation.length > 10) {
+        // Standard format, no additional information.
+        Extend(rawBill, {
+          summary: defaultIfEmpty(generalInformation.get(11))
+        });
+      } else {
+        // Must get additional information.
+        generalInformation = document.find("span.item1 > div > div").contents();
+
+        Extend(rawBill, {
+          revisionChamber: defaultIfEmpty(generalInformation.get(1)),
+          revisionFile: defaultIfEmpty(generalInformation.get(3)),
+          summary: defaultIfEmpty(generalInformation.get(6)) ||
+            defaultIfEmpty(generalInformation.get(7))
+        });
+      }
+      callback(null);
+    } catch (err) {
+      callback(err);
+    }
   };
 
   return {

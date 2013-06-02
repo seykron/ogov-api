@@ -12,12 +12,10 @@ var DataSource = Import("ogov.core.DataSource");
  * @type {Object}
  */
 var PERSISTENT_CLASSES = {
-  "OG.domain.Bill": function () {
-    return Import("ogov.domain.Bill");
-  },
-  "OG.domain.Person": function () {
-    return Import("ogov.domain.Person");
-  }
+  "OG.domain.Bill": Import("ogov.domain.Bill"),
+  "OG.domain.Person": Import("ogov.domain.Person"),
+  "OG.domain.Procedure": Import("ogov.domain.Procedure"),
+  "OG.domain.Dictum": Import("ogov.domain.Dictum")
 };
 
 module.exports = {
@@ -33,7 +31,7 @@ module.exports = {
       var persistentClass;
 
       for (modelName in PERSISTENT_CLASSES) {
-        persistentClass = PERSISTENT_CLASSES[modelName]();
+        persistentClass = PERSISTENT_CLASSES[modelName];
         SchemaRegistry.register(modelName, persistentClass,
           persistentClass.SCHEMA_INFO);
       }

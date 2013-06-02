@@ -33,7 +33,7 @@ module.exports = function BillImporterJob(cronPattern) {
    * @fieldOf OG.import.BillImporterJob#
    */
   var importer = new Import("ogov.importer.BillImporter")({
-    poolSize: 2,
+    poolSize: 4,
     pageSize: 250,
     logger: LOG
   });

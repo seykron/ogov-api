@@ -38,8 +38,25 @@ module.exports = function Bill (rawBill) {
      */
     summary: String,
 
+    /** Chamber that reviews this bill.
+     */
+    revisionChamber: String,
+
+    /** Identifier of file in chamber that reviews this bill.
+     */
+    revisionFile: String,
+
     /** List of subscribers. */
-    subscribers: [{ _id: mongoose.Schema.ObjectId }]
+    subscribers: [{ _id: mongoose.Schema.ObjectId }],
+
+    /** Committees that reviwed this bill. */
+    committees: [{ type: String }],
+
+    /** List of procedures that affected this bill. */
+    procedures: [{ _id: mongoose.Schema.ObjectId }],
+
+    /** List of dictums over this bill. */
+    dictums: [{ _id: mongoose.Schema.ObjectId }]
   }, rawBill || {});
 };
 
