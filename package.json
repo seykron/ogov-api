@@ -9,7 +9,7 @@
   "dependencies": {
     "mongoose": "*",
     "jsdom": "*",
-    "express": "*",
+    "express": "3.5",
     "winston": "*",
     "async": "*",
     "cron": "*"
