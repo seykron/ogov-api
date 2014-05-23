@@ -17,6 +17,8 @@ module.exports = function QueryStreamWrapper(queryStream) {
     stream.emit("error", err);
   }).on('close', function () {
     stream.emit("close");
+  }).on('end', function () {
+    stream.emit("end");
   });
 
   return stream;

@@ -5,6 +5,20 @@
  */
 module.exports = function BillImporterJob(cronPattern) {
 
+  /** Node's FileSystem API.
+   * @type {Object}
+   * @private
+   * @fieldOf BillImporterJob#
+   */
+  var fs = require("fs");
+
+  /** Node's Path API.
+   * @type {Object}
+   * @private
+   * @fieldOf BillImporterJob#
+   */
+  var path = require("path");
+
   /** Logger for the importer.
    * @type winston.Logger
    * @private
@@ -44,12 +58,34 @@ module.exports = function BillImporterJob(cronPattern) {
    * @fieldOf OG.import.BillImporterJob#
    */
   var execute = function () {
-    importer.start(function (pageNumber, bills, failedBills, callback) {
+    var lastPage = 0;
+    var lastPageFile = path.join(__dirname, "..", "..", "last_page.log");
+
+    if (fs.existsSync(lastPageFile)) {
+      lastPage = fs.readFileSync(lastPageFile).toString();
+      if (isNaN(lastPage)) {
+        lastPage = 0;
+      }
+    }
+
+    importer.start(lastPage, function (pageNumber, bills, failedBills, callback) {
+      lastPage = pageNumber;
+
       pageResult.push({
         number: pageNumber,
         success: bills.length,
         failed: failedBills.length
       });
+
+      if (fs.existsSync(lastPageFile)) {
+        lastPage = fs.readFileSync(lastPageFile).toString();
+
+        if (isNaN(lastPage)) {
+          lastPage = 0;
+        }
+      }
+
+      fs.writeFileSync(lastPageFile, lastPage);
 
       callback();
     });

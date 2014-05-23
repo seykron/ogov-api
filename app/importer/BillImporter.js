@@ -61,6 +61,20 @@ module.exports = function BillImporter(options) {
     "&pageorig=1" +               // Required to make it work.
     "&fromForm=1";                // Required to make it work.
 
+  /** Node's FileSystem API.
+   * @type {Object}
+   * @private
+   * @fieldOf BillImporterJob#
+   */
+  var fs = require("fs");
+
+  /** Node's Path API.
+   * @type {Object}
+   * @private
+   * @fieldOf BillImporterJob#
+   */
+  var path = require("path");
+
   /** Async flow contro library.
    * @type Object
    * @private
@@ -473,12 +487,16 @@ module.exports = function BillImporter(options) {
   return {
     /** Starts the importer and notifies every time a page is ready.
      *
+     * @para {Number} lastPage Last page fetched to resume an import process
+     *    point. Cannot be null.
      * @param {Function} pageSuccessCallback Function invoked when a single page
      *   is already processed. It takes the <code>pageNumber</code>, the list of
      *   <code>bills</code>, <code>failedBills</code> and a callback to continue
      *   processing the next page in the queue.
      */
-    start: function (pageSuccessCallback) {
+    start: function (lastPage, pageSuccessCallback) {
+      pageCount = lastPage;
+
       var queue = async.queue(function (pageNumber, callback) {
         if (stop) {
           LOG.info("Page " + pageNumber + " import aborted.");
