@@ -13,7 +13,15 @@ http://localhost:3000/
 ```
 
 ## Import data
-Importer job must run as cron job. Until then it's possible to start the importer as standalone process:
+
+The importer was moved to the following project:
+
+https://github.com/seykron/ogov-importer
+
+Now the importer runs standalone and it is possible to store bills in different data sources.
+
+Anyway, the old importer will be available for some time but **it is deprecated**:
+
 ```
 node app/importer.js
 ```
